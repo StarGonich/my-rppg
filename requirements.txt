@@ -1,2 +1,5 @@
 opencv-python
 vitallens
+ampdlib
+pandas
+scipy
