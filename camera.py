@@ -5,18 +5,19 @@ import os
 from datetime import datetime
 from vitallens import VitalLens
 import logging
+from SQI import n_sqi
+from WaveHRV import wavehrv
+
 logging.disable(logging.WARNING)  # отключение предупреждения: 'WARNING:root:No faces found'
 
-# Инициализация VitalLens
 vl = VitalLens(method="pos", export_to_json=False)
-
-# Получаем детектор лиц из библиотеки
 face_detector = vl.face_detector
 
 # Настройки
 window_name = "VitalLens - Camera"
 cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 620)
+# cap = cv2.VideoCapture("http://10.133.232.17:4747/video")  # для записи со смартфона
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # Переменные состояния
@@ -26,9 +27,10 @@ recording_duration = 30  # секунд
 frames = []
 face_boxes = []
 current_bbox = None
-fps = cap.get(cv2.CAP_PROP_FPS)
-print(f"FPS камеры = {fps}")
-frame_count = 0
+FPS = cap.get(cv2.CAP_PROP_FPS)
+print(f"FPS камеры = {FPS}")
+FPS = 30
+TARGET_FRAMES = recording_duration * FPS
 face_lost = False
 
 
@@ -45,7 +47,7 @@ def detect_face(frame):
         faces, _ = face_detector(
             inputs=frame_rgb,
             n_frames=1,
-            fps=fps
+            fps=FPS
         )
 
         if len(faces) > 0:
@@ -96,19 +98,31 @@ def process_video(frames, face_boxes, fps):
     video_array = np.array(frames, dtype=np.uint8)
 
     try:
-        results = vl(
-            video=video_array,
-            faces=faces_array,
-            fps=fps
-        )
+        results = vl(video=video_array, fps=fps)
 
         if results and len(results) > 0:
             vitals = results[0]['vitals']
+            rppg_signal = results[0]['waveforms']['ppg_waveform']['data']
+            N_SQI = n_sqi(rppg_signal, fps)
+
+            # ========== ВЫВОД В КОНСОЛЬ ==========
             print("\n" + "=" * 50)
             print("РЕЗУЛЬТАТЫ ИЗМЕРЕНИЯ:")
             for name, data in vitals.items():
                 if data.get('value') is not None:
                     print(f"{name.upper()}: {data['value']:.1f} {data.get('unit', '')}")
+            hrv_results = wavehrv(rppg_signal, fps)
+            print(f"SDNN: {hrv_results["sdnn"]}")
+            print(f"RMSSD: {hrv_results["rmssd"]}")
+
+            # ========== ВЫВОД N_SQI ==========
+            print("-" * 50)
+            print("КАЧЕСТВО СИГНАЛА (SQI):")
+            if N_SQI is not None:
+                print(f"N_SQI: {N_SQI:.4f}")
+                print(f"Оценка: {"Excellent" if N_SQI < 0.293 else "Acceptable/Unfit"}")
+            else:
+                print(f"N_SQI: не удалось вычислить")
             print("=" * 50)
             return results
         else:
@@ -122,8 +136,8 @@ def process_video(frames, face_boxes, fps):
         return None
 
 
-# Функция сохранения видео
 def save_video(frames, fps):
+    """Сохранение видео рядом с программой в .avi файл, без сжатия"""
     if not frames:
         return None
 
@@ -133,7 +147,8 @@ def save_video(frames, fps):
 
     try:
         h, w = frames[0].shape[:2]
-        fourcc = cv2.VideoWriter_fourcc(*'HFYU')
+        fourcc = cv2.VideoWriter_fourcc(*'FFV1')
+        # fourcc = cv2.VideoWriter_fourcc(*'HFYU')
         out = cv2.VideoWriter(video_path, fourcc, fps, (w, h))
 
         for frame in frames:
@@ -178,14 +193,16 @@ while True:
         face_boxes.append(current_bbox)
 
         elapsed = time.time() - recording_start_time
+        print(len(frames))
 
         # Проверка окончания записи
         if elapsed >= recording_duration:
             is_recording = False
             print(f"Запись завершена успешно! Записано {len(frames)} кадров")
-            if len(frames) >= 299:  # минимум 1 секунда
-                save_video(frames, fps)
-                process_video(frames, face_boxes, fps)
+            # defacto_fps = len(frames) / recording_duration
+            if len(frames) >= 299:  # минимум 10 секунд
+                save_video(frames, FPS)
+                process_video(frames, face_boxes, FPS)
             else:
                 print(f"Недостаточно кадров: {len(frames)} (нужно минимум 299)")
             frames = []
@@ -219,7 +236,7 @@ while True:
                 recording_start_time = time.time()
                 frames = []
                 face_boxes = []
-                print(f"\nНачата запись на {fps} секунд...")
+                print(f"\nНачата запись на {recording_duration} секунд...")
                 print("Держите лицо в кадре!")
             else:
                 print("Лицо не обнаружено!")
@@ -229,8 +246,8 @@ while True:
             print("\nЗапись остановлена пользователем")
             if len(frames) >= 299:
                 print(f"Записано {len(frames)} кадров")
-                save_video(frames, fps)
-                process_video(frames, face_boxes, fps)
+                save_video(frames, FPS)
+                process_video(frames, face_boxes, FPS)
             else:
                 print(f"Недостаточно кадров: {len(frames)}")
             frames = []
