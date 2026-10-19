@@ -3,3 +3,4 @@ vitallens
 ampdlib
 pandas
 scipy
+kymatio
