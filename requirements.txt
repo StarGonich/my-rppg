@@ -2,5 +2,7 @@ opencv-python
 vitallens
 ampdlib
 pandas
-scipy
-kymatio
+scipy<1.15
+scikit-learn
+matplotlib
+numpy
