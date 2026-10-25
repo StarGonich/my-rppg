@@ -134,8 +134,7 @@ def _amplify_edges(reconstructed, w, s):
     return R
 
 
-def wavehrv(signal, fs) -> dict:
-    signal = np.asarray(signal)
+def wavehrv(signal: np.ndarray, fs) -> dict:
     signal = signal - signal.mean()
 
     signal, fs = _interpolate(signal, fs)
@@ -213,7 +212,7 @@ def wavehrv(signal, fs) -> dict:
     reconstructed = reconstructed[counts > 0]
     reconstructed = _amplify_edges(reconstructed, window_size, step)
 
-    t = np.arange(len(reconstructed)) / fs
+    # t = np.arange(len(reconstructed)) / fs
     # plt.figure(figsize=(14, 4))
     # plt.plot(t, reconstructed, linewidth=0.8)
     # plt.xlabel('Time (s)')
@@ -230,9 +229,13 @@ def wavehrv(signal, fs) -> dict:
 
     # 1. ∀IBI ∈ [400 ms, 1300 ms]
     ibi = ibi[(ibi >= 400.0) & (ibi <= 1300.0)]
+    if len(ibi) == 0:
+        return {"n_ibi": 0, "mean_ibi_ms": None, "sdnn": None, "rmssd": None }
     # 2. ∀IBI ∈ mean(IBI) ± 0.4mean(IBI)
     ibi_mean = ibi.mean()
     ibi = ibi[np.abs(ibi - ibi_mean) <= 0.4 * ibi_mean]
+    if len(ibi) == 0:
+        return {"n_ibi": 0, "mean_ibi_ms": None, "sdnn": None, "rmssd": None }
     # 3. Non-overlapping window is slid over IBIs with window size 10.
     win = 10
     n = len(ibi)
@@ -243,6 +246,8 @@ def wavehrv(signal, fs) -> dict:
         ok = np.abs(seg - mu_w) <= 0.2 * mu_w
         keep_mask[start:start + win] = ok
     ibi = ibi[keep_mask]
+    if len(ibi) == 0:
+        return {"n_ibi": 0, "mean_ibi_ms": None, "sdnn": None, "rmssd": None }
 
     sdnn = (np.sqrt(np.sum((ibi - ibi.mean()) ** 2) / (len(ibi) - 1)))
     rmssd = (np.sqrt(np.sum(np.diff(ibi) ** 2) / (len(ibi) - 1)))
@@ -255,15 +260,30 @@ def wavehrv(signal, fs) -> dict:
     }
 
 
-def wavehrv_simple(signal, fs) -> dict:
+def wavehrv_simple(signal: np.ndarray, fs) -> dict:
     peaks = ampdlib.ampd(signal)
+
+    # plt.figure(figsize=(15, 4))
+    # plt.plot(np.arange(len(signal)) / fs, signal, color="tab:blue", lw=0.8, label="сигнал")
+    # plt.plot(peaks / fs, signal[peaks], "rx", ms=6, label=f"пики ({len(peaks)})")
+    # plt.title("сигнал и найденные пики")
+    # plt.xlabel("время, с")
+    # plt.ylabel("амплитуда")
+    # plt.legend(loc="upper right")
+    # plt.grid(True, alpha=0.3)
+    # plt.show()
+
     ibi = np.diff(peaks) / fs * 1000.0
 
     # 1. ∀IBI ∈ [400 ms, 1300 ms]
     ibi = ibi[(ibi >= 400.0) & (ibi <= 1300.0)]
+    if len(ibi) == 0:
+        return {"n_ibi": 0, "mean_ibi_ms": None, "sdnn": None, "rmssd": None }
     # 2. ∀IBI ∈ mean(IBI) ± 0.4mean(IBI)
     ibi_mean = ibi.mean()
     ibi = ibi[np.abs(ibi - ibi_mean) <= 0.4 * ibi_mean]
+    if len(ibi) == 0:
+        return {"n_ibi": 0, "mean_ibi_ms": None, "sdnn": None, "rmssd": None }
     # 3. Non-overlapping window is slid over IBIs with window size 10.
     win = 10
     n = len(ibi)
@@ -274,6 +294,8 @@ def wavehrv_simple(signal, fs) -> dict:
         ok = np.abs(seg - mu_w) <= 0.2 * mu_w
         keep_mask[start:start + win] = ok
     ibi = ibi[keep_mask]
+    if len(ibi) == 0:
+        return {"n_ibi": 0, "mean_ibi_ms": None, "sdnn": None, "rmssd": None }
 
     sdnn = (np.sqrt(np.sum((ibi - ibi.mean()) ** 2) / (len(ibi) - 1)))
     rmssd = (np.sqrt(np.sum(np.diff(ibi) ** 2) / (len(ibi) - 1)))
