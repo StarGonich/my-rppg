@@ -123,7 +123,9 @@ def _get_points(face_landmarks, indices, w, h):
     points = []
     for idx in indices:
         lm = face_landmarks[idx]
-        points.append((int(lm.x * w), int(lm.y * h)))
+        x = int(np.clip(lm.x * w, 0, w - 1))
+        y = int(np.clip(lm.y * h, 0, h - 1))
+        points.append((x, y))
     return np.array(points, dtype=np.int32)
 
 
